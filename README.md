@@ -25,6 +25,6 @@ Install Package "Keypirinha-Time"
 
 ### Manually
 
-* Download the `Time.keypirinha-package` from the [Release Notes](https://github.com/ueffel/Keypirinha-Time/releases/latest).
+* Download the `Time.keypirinha-package` from the [releases](https://github.com/ueffel/Keypirinha-Time/releases/latest).
 * Copy the file into `%APPDATA%\Keypirinha\InstalledPackages` (installed mode) or
   `<Keypirinha_Home>\portable\Profile\InstalledPackages` (portable mode)
