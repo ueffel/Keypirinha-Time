@@ -12,6 +12,7 @@ lib = os.path.join(os.path.dirname(__file__), "lib")
 if lib not in sys.path:
     sys.path.append(lib)
 import dateutil.parser
+import dateutil.zoneinfo
 
 
 class Time(kp.Plugin):
@@ -31,7 +32,6 @@ class Time(kp.Plugin):
         self._formats = self.DEFAULT_FORMATS
         self._locales = self.DEFAULT_LOCALES
         self._item_label = self.DEFAULT_ITEM_LABEL
-        # self._debug = True
 
     def on_start(self):
         self._read_config()
@@ -48,6 +48,8 @@ class Time(kp.Plugin):
         """
         self.dbg("Reading config")
         settings = self.load_settings()
+
+        self._debug = settings.get_bool("debug", "main", False)
 
         self._formats = settings.get_multiline("formats", "main", self.DEFAULT_FORMATS)
         self.dbg("Formats =", self._formats)
@@ -69,6 +71,14 @@ class Time(kp.Plugin):
                 target="time",
                 args_hint=kp.ItemArgsHint.REQUIRED,
                 hit_hint=kp.ItemHitHint.KEEPALL
+            ),
+            self.create_item(
+                category=kp.ItemCategory.KEYWORD,
+                label="Timezone:",
+                short_desc="Current date in different timezones",
+                target="timezone",
+                args_hint=kp.ItemArgsHint.REQUIRED,
+                hit_hint=kp.ItemHitHint.KEEPALL
             )
         ]
         self.set_catalog(catalog)
@@ -84,35 +94,39 @@ class Time(kp.Plugin):
                 label=str(int(timetoshow.timestamp())),
                 short_desc="Time as unix timestamp (seconds since Jan 01 1970. (UTC)) {}".format(self.COPY_TO_CB),
                 target="timestamp_int",
-                args_hint=kp.ItemArgsHint.FORBIDDEN,
-                hit_hint=kp.ItemHitHint.IGNORE
+                args_hint=kp.ItemArgsHint.ACCEPTED,
+                hit_hint=kp.ItemHitHint.IGNORE,
+                loop_on_suggest=True
             ))
             suggestions.append(self.create_item(
                 category=kp.ItemCategory.KEYWORD,
                 label=str(int(timetoshow.timestamp() * 1000)),
                 short_desc="Time as timestamp (milliseconds since Jan 01 1970. (UTC)) {}".format(self.COPY_TO_CB),
                 target="timestamp_float",
-                args_hint=kp.ItemArgsHint.FORBIDDEN,
-                hit_hint=kp.ItemHitHint.IGNORE
+                args_hint=kp.ItemArgsHint.ACCEPTED,
+                hit_hint=kp.ItemHitHint.IGNORE,
+                loop_on_suggest=True
             ))
         except OSError as ex:
             self.dbg("Timestamp failed:", ex)
 
         suggestions.append(self.create_item(
             category=kp.ItemCategory.KEYWORD,
-            label=str(timetoshow.isoformat(timespec="seconds")),
+            label=timetoshow.isoformat(timespec="seconds"),
             short_desc="Time in ISO 8601 format {}".format(self.COPY_TO_CB),
             target="isoformat_s",
-            args_hint=kp.ItemArgsHint.FORBIDDEN,
-            hit_hint=kp.ItemHitHint.IGNORE
+            args_hint=kp.ItemArgsHint.ACCEPTED,
+            hit_hint=kp.ItemHitHint.IGNORE,
+            loop_on_suggest=True
         ))
         suggestions.append(self.create_item(
             category=kp.ItemCategory.KEYWORD,
-            label=str(timetoshow.isoformat(timespec="microseconds")),
+            label=timetoshow.isoformat(timespec="microseconds"),
             short_desc="Time in ISO 8601 format {}".format(self.COPY_TO_CB),
             target="isoformat_ms",
-            args_hint=kp.ItemArgsHint.FORBIDDEN,
-            hit_hint=kp.ItemHitHint.IGNORE
+            args_hint=kp.ItemArgsHint.ACCEPTED,
+            hit_hint=kp.ItemHitHint.IGNORE,
+            loop_on_suggest=True
         ))
 
         for idx, frmt in enumerate(self._formats):
@@ -126,8 +140,9 @@ class Time(kp.Plugin):
                                                                                     loc if loc else "system default",
                                                                                     self.COPY_TO_CB),
                             target="format_{}_{}".format(idx, loc),
-                            args_hint=kp.ItemArgsHint.FORBIDDEN,
-                            hit_hint=kp.ItemHitHint.IGNORE
+                            args_hint=kp.ItemArgsHint.ACCEPTED,
+                            hit_hint=kp.ItemHitHint.IGNORE,
+                            loop_on_suggest=True
                         )
                         if not self.__contains_item(suggestions, item):
                             suggestions.append(item)
@@ -136,7 +151,8 @@ class Time(kp.Plugin):
 
         return suggestions
 
-    def __contains_item(self, suggestions, search):
+    @staticmethod
+    def __contains_item(suggestions, search):
         """Checks if a catalog item with the same label is already in the collection
         """
         for item in suggestions:
@@ -161,14 +177,46 @@ class Time(kp.Plugin):
         if not items_chain:
             return
 
-        if user_input:
-            timetoshow = self._tryparse(user_input)
-        else:
-            timetoshow = datetime.datetime.now().astimezone()
+        if (len(items_chain) % 2 == 1 and items_chain[0].target() == "time") \
+                or (len(items_chain) > 1 and len(items_chain) % 2 == 0 and items_chain[0].target() == "timezone"):
+            timezone = items_chain[-1].target() if len(items_chain) > 1 else None
+            self.dbg("timezone", timezone)
+            if user_input:
+                parsed = self._tryparse(user_input)
+                if timezone:
+                    timetoshow = parsed.replace(tzinfo=dateutil.tz.gettz(timezone))
+                else:
+                    timetoshow = parsed.astimezone()
+            else:
+                if items_chain[0].target() == "time" and len(items_chain) > 1 or \
+                        items_chain[0].target() == "timezone" and len(items_chain) > 2:
+                    time_wo_zone = self._tryparse(items_chain[-2].label())
+                else:
+                    time_wo_zone = datetime.datetime.now()
 
-        if timetoshow:
-            suggestions = self._create_suggestions(timetoshow)
-            self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
+                if timezone:
+                    timetoshow = time_wo_zone.astimezone(tz=dateutil.tz.gettz(timezone))
+                else:
+                    timetoshow = time_wo_zone.astimezone()
+                self.dbg("timetoshow", timetoshow)
+
+            if timetoshow:
+                suggestions = self._create_suggestions(timetoshow)
+                self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
+        elif ((len(items_chain) % 2 == 1) and items_chain[0].target() == "timezone") \
+                or (len(items_chain) > 1 and len(items_chain) % 2 == 0 and items_chain[0].target() == "time"):
+            suggestions = []
+            for timezone in dateutil.zoneinfo.get_zonefile_instance().zones:
+                suggestions.append(self.create_item(
+                    category=kp.ItemCategory.KEYWORD,
+                    label=timezone.replace("_", " "),
+                    short_desc="Time in timezone '{}'".format(timezone),
+                    target=timezone,
+                    args_hint=kp.ItemArgsHint.REQUIRED,
+                    hit_hint=kp.ItemHitHint.IGNORE,
+                    loop_on_suggest=True
+                ))
+            self.set_suggestions(suggestions)
 
     def _tryparse(self, in_str):
         """Tries to parse a string into a datetime object
@@ -176,23 +224,23 @@ class Time(kp.Plugin):
         # Maybe its a timestamp
         if re.match("^\d+$", in_str):
             try:
-                return datetime.datetime.fromtimestamp(int(in_str)).astimezone()
+                return datetime.datetime.fromtimestamp(int(in_str))
             except:
                 self.dbg("Parsing failed: ", sys.exc_info()[0])
 
             try:
-                return datetime.datetime.fromtimestamp(int(in_str) / 1000).astimezone()
+                return datetime.datetime.fromtimestamp(int(in_str) / 1000)
             except OSError as ex:
                 self.dbg("Parsing failed: ", ex)
 
         if re.match("^\d+\.\d*$", in_str):
             try:
-                return datetime.datetime.fromtimestamp(float(in_str)).astimezone()
+                return datetime.datetime.fromtimestamp(float(in_str))
             except OSError as ex:
                 self.dbg("Parsing failed: ", ex)
 
             try:
-                return datetime.datetime.fromtimestamp(float(in_str) / 1000).astimezone()
+                return datetime.datetime.fromtimestamp(float(in_str) / 1000)
             except OSError as ex:
                 self.dbg("Parsing failed: ", ex)
 
@@ -207,5 +255,6 @@ class Time(kp.Plugin):
     def on_execute(self, item, action):
         """Copies the item label to the clipboard
         """
+        self.dbg("on_execute:", item.target())
         kpu.set_clipboard(item.label())
 
