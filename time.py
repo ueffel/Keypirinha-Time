@@ -25,6 +25,7 @@ class Time(kp.Plugin):
         "C",
     ]
     DEFAULT_ITEM_LABEL = "Time:"
+    DEFAULT_ITEM_LABEL2 = "Timezone:"
     COPY_TO_CB = "(press Enter to copy to clipboard)"
 
     def __init__(self):
@@ -32,6 +33,7 @@ class Time(kp.Plugin):
         self._formats = self.DEFAULT_FORMATS
         self._locales = self.DEFAULT_LOCALES
         self._item_label = self.DEFAULT_ITEM_LABEL
+        self._item_label2 = self.DEFAULT_ITEM_LABEL2
 
     def on_start(self):
         self._read_config()
@@ -60,6 +62,9 @@ class Time(kp.Plugin):
         self._item_label = settings.get("item_label", "main", self.DEFAULT_ITEM_LABEL)
         self.dbg("item_label =", self._item_label)
 
+        self._item_label2 = settings.get("item_label2", "main", self.DEFAULT_ITEM_LABEL2)
+        self.dbg("item_label2 =", self._item_label2)
+
     def on_catalog(self):
         """Adds the kill command to the catalog
         """
@@ -74,7 +79,7 @@ class Time(kp.Plugin):
             ),
             self.create_item(
                 category=kp.ItemCategory.KEYWORD,
-                label="Timezone:",
+                label=self._item_label2,
                 short_desc="Current date in different timezones",
                 target="timezone",
                 args_hint=kp.ItemArgsHint.REQUIRED,
