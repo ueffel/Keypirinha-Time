@@ -187,7 +187,18 @@ class Time(kp.Plugin):
             timezone = items_chain[-1].target() if len(items_chain) > 1 else None
             self.dbg("timezone", timezone)
             if user_input:
+                try:
+                    if int(user_input) < 86400:
+                        self.dbg("Timestamps smaller than 86400 do not work.")
+                        return
+                except ValueError:
+                    pass
+
                 parsed = self._tryparse(user_input)
+                self.dbg("parsed time", parsed)
+                if parsed is None:
+                    return
+
                 if timezone:
                     timetoshow = parsed.replace(tzinfo=dateutil.tz.gettz(timezone))
                 else:
