@@ -18,6 +18,8 @@ There is also the possibility to start off with a timezone with item`Timezone:`
 
 Executing any of the suggestions copies the selected item to the clipboard.
 
+![Usage](usage.gif)
+
 ## Configuration
 
 It's possible to configure multiple formats and locales in which the time is displayed. See the
