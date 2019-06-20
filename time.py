@@ -3,14 +3,13 @@ import keypirinha_util as kpu
 import datetime
 import locale
 import contextlib
-import sys
 import os
 import re
+import traceback
+import site
 
 # insert lib directory to path to import modules normally
-lib = os.path.join(os.path.dirname(__file__), "lib")
-if lib not in sys.path:
-    sys.path.append(lib)
+site.addsitedir(os.path.join(os.path.dirname(__file__), "lib"))
 import dateutil.parser
 import dateutil.zoneinfo
 
@@ -191,8 +190,8 @@ class Time(kp.Plugin):
                     if int(user_input) < 86400:
                         self.dbg("Timestamps smaller than 86400 do not work.")
                         return
-                except ValueError:
-                    pass
+                except ValueError as ex:
+                    self.dbg("Input error: ", ex, "\n", traceback.format_exc())
 
                 parsed = self._tryparse(user_input)
                 self.dbg("parsed time", parsed)
@@ -238,33 +237,33 @@ class Time(kp.Plugin):
         """Tries to parse a string into a datetime object
         """
         # Maybe its a timestamp
-        if re.match("^\d+$", in_str):
+        if re.match(r"^\d+$", in_str):
             try:
                 return datetime.datetime.fromtimestamp(int(in_str))
-            except:
-                self.dbg("Parsing failed: ", sys.exc_info()[0])
+            except Exception as ex:
+                self.dbg("Parsing failed: ", ex, "\n", traceback.format_exc())
 
             try:
                 return datetime.datetime.fromtimestamp(int(in_str) / 1000)
-            except OSError as ex:
-                self.dbg("Parsing failed: ", ex)
+            except Exception as ex:
+                self.dbg("Parsing failed: ", ex, "\n", traceback.format_exc())
 
-        if re.match("^\d+\.\d*$", in_str):
+        if re.match(r"^\d+\.\d*$", in_str):
             try:
                 return datetime.datetime.fromtimestamp(float(in_str))
             except OSError as ex:
-                self.dbg("Parsing failed: ", ex)
+                self.dbg("Parsing failed: ", ex, "\n", traceback.format_exc())
 
             try:
                 return datetime.datetime.fromtimestamp(float(in_str) / 1000)
             except OSError as ex:
-                self.dbg("Parsing failed: ", ex)
+                self.dbg("Parsing failed: ", ex, "\n", traceback.format_exc())
 
         # do your magic dateutil
         try:
             return dateutil.parser.parse(in_str)
         except (ValueError, OverflowError) as ex:
-            self.dbg("Parsing failed: ", ex)
+            self.dbg("Parsing failed: ", ex, "\n", traceback.format_exc())
 
         return None
 
@@ -273,4 +272,3 @@ class Time(kp.Plugin):
         """
         self.dbg("on_execute:", item.target())
         kpu.set_clipboard(item.label())
-
