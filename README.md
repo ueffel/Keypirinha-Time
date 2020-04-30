@@ -1,8 +1,7 @@
 # Keypirinha Time
 
-This is a package that extends the fast keystroke launcher keypirinha
-[(http://keypirinha.com/)](http://keypirinha.com/) with a command to convert and format datetime
-strings.
+This is a package that extends the fast keystroke launcher keypirinha (<http://keypirinha.com/>)
+with a command to convert and format datetime strings.
 
 ## Usage
 
