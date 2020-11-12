@@ -43,6 +43,7 @@ class Time(kp.Plugin):
         """
         if flags & kp.Events.PACKCONFIG:
             self._read_config()
+            self.on_catalog()
 
     def _read_config(self):
         """Reads the config
