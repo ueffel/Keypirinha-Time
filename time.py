@@ -222,12 +222,12 @@ class Time(kp.Plugin):
         elif ((len(items_chain) % 2 == 1) and items_chain[0].target() == "timezone") \
                 or (len(items_chain) > 1 and len(items_chain) % 2 == 0 and items_chain[0].target() == "time"):
             suggestions = []
-            for timezone in dateutil.zoneinfo.get_zonefile_instance().zones:
+            for name, timezone in dateutil.zoneinfo.get_zonefile_instance().zones.items():
                 suggestions.append(self.create_item(
                     category=kp.ItemCategory.KEYWORD,
-                    label=timezone.replace("_", " "),
-                    short_desc="Time in timezone '{}'".format(timezone),
-                    target=timezone,
+                    label="{} ({})".format(name.replace("_", " "), datetime.datetime.utcnow().astimezone(tz=timezone).strftime('%z')),
+                    short_desc="Time in timezone '{}'".format(name),
+                    target=name,
                     args_hint=kp.ItemArgsHint.REQUIRED,
                     hit_hint=kp.ItemHitHint.IGNORE,
                     loop_on_suggest=True
