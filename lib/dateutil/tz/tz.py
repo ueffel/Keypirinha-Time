@@ -34,7 +34,7 @@ except ImportError:
 from warnings import warn
 
 ZERO = datetime.timedelta(0)
-EPOCH = datetime.datetime.utcfromtimestamp(0)
+EPOCH = datetime.datetime(1970, 1, 1, 0, 0)
 EPOCHORDINAL = EPOCH.toordinal()
 
 
@@ -1596,7 +1596,7 @@ def __get_gettz():
                     name = os.environ["TZ"]
                 except KeyError:
                     pass
-            if name is None or name == ":":
+            if name is None or name in ("", ":"):
                 for filepath in TZFILES:
                     if not os.path.isabs(filepath):
                         filename = filepath
