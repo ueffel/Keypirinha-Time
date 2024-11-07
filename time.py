@@ -1,12 +1,16 @@
 import keypirinha as kp
+import keypirinha_net as kpn
 import keypirinha_util as kpu
 import contextlib
 import datetime
+import json
 import locale
 import os
 import re
 import site
+import sys
 import traceback
+import urllib
 
 # insert lib directory to path to import modules normally
 site.addsitedir(os.path.join(os.path.dirname(__file__), "lib"))
@@ -25,6 +29,7 @@ class Time(kp.Plugin):
     ]
     DEFAULT_ITEM_LABEL = "Time:"
     DEFAULT_ITEM_LABEL2 = "Timezone:"
+    DEFAULT_ONLINE = True
     COPY_TO_CB = "(press Enter to copy to clipboard)"
 
     def __init__(self):
@@ -33,6 +38,10 @@ class Time(kp.Plugin):
         self._locales = self.DEFAULT_LOCALES
         self._item_label = self.DEFAULT_ITEM_LABEL
         self._item_label2 = self.DEFAULT_ITEM_LABEL2
+        self._online = self.DEFAULT_ONLINE
+        self._urlopener = self._build_urlopener()
+        self._location_cache = {}
+        self._latlon_cache = {}
 
     def on_start(self):
         self._read_config()
@@ -45,6 +54,10 @@ class Time(kp.Plugin):
         if flags & kp.Events.PACKCONFIG:
             self._read_config()
             self.on_catalog()
+
+        if flags & kp.Events.NETOPTIONS:
+            self.dbg("Network settings changed: rebuilding urlopener")
+            self._urlopener = self._build_urlopener()
 
     def _read_config(self):
         """Reads the config"""
@@ -69,8 +82,31 @@ class Time(kp.Plugin):
         )
         self.dbg("item_label2 =", self._item_label2)
 
+        self._online = settings.get_bool("online", "main", self.DEFAULT_ONLINE)
+        self.dbg("online =", self._online)
+
+    def _build_urlopener(self):
+        """Creates an urllib opener with some request headers and returns it"""
+        self.dbg("Building urlopener")
+        user_agent = "{}/{} python-{}/{}.{}.{}".format(
+            kp.name(),
+            kp.version_string(),
+            urllib.__name__,
+            sys.version_info[0],
+            sys.version_info[1],
+            sys.version_info[2],
+        )
+        opener = kpn.build_urllib_opener()
+        opener.addheaders = [("Accept-Encoding", "gzip"), ("User-Agent", user_agent)]
+        return opener
+
     def on_catalog(self):
         """Adds the kill command to the catalog"""
+
+        # clear cache
+        self._location_cache = {}
+        self._latlon_cache = {}
+
         catalog = [
             self.create_item(
                 category=kp.ItemCategory.KEYWORD,
@@ -268,6 +304,83 @@ class Time(kp.Plugin):
                     )
                 )
             self.set_suggestions(suggestions)
+
+            if self._online and user_input and not self.should_terminate(0.5):
+                suggestions.extend(self._get_online_suggestions(user_input))
+                self.set_suggestions(suggestions)
+
+    def _get_online_suggestions(self, user_input):
+        """Trys to search the user_input as location name and queries their respective timezones. Returns a list of
+        keypirinha suggestions"""
+        suggestions = []
+        if user_input in self._location_cache:
+            self.dbg("using cached results for input:", user_input)
+            results = self._location_cache[user_input]
+        else:
+            req = urllib.request.Request(
+                "https://nominatim.openstreetmap.org/search?format=json&q="
+                + urllib.parse.quote_plus(user_input)
+            )
+            with self._urlopener.open(req) as resp:
+                if resp.info().get("Content-Encoding") == "gzip":
+                    results = json.loads(gzip.decompress(resp.read()).decode())
+                else:
+                    results = json.loads(resp.read().decode())
+            self.dbg("putting results in cache for input:", user_input)
+            self._location_cache[user_input] = results
+
+        self.dbg(results)
+        count = 0
+        for result in results:
+            if count >= 5:
+                break
+            lat = result["lat"]
+            lon = result["lon"]
+            display_name = result["display_name"]
+            name = result["name"]
+
+            if (lat, lon) in self._latlon_cache:
+                self.dbg("using cached results for lat/lon:", (lat, lon))
+                results2 = self._latlon_cache[(lat, lon)]
+            else:
+                req = urllib.request.Request(
+                    "https://api.geotimezone.com/public/timezone?latitude="
+                    + lat
+                    + "&longitude="
+                    + lon
+                )
+                with self._urlopener.open(req) as resp:
+                    if resp.info().get("Content-Encoding") == "gzip":
+                        results2 = json.loads(gzip.decompress(resp.read()).decode())
+                    else:
+                        results2 = json.loads(resp.read().decode())
+                self.dbg("putting results in cache for lat/lon:", (lat, lon))
+                self._latlon_cache[(lat, lon)] = results2
+
+            self.dbg(results2)
+            tz = results2["iana_timezone"]
+            timezone = dateutil.tz.gettz(tz)
+
+            suggestions.append(
+                self.create_item(
+                    category=kp.ItemCategory.KEYWORD,
+                    label="{}: {} in timezone {} ({})".format(
+                        user_input,
+                        name,
+                        tz,
+                        datetime.datetime.utcnow()
+                        .astimezone(tz=timezone)
+                        .strftime("%z"),
+                    ),
+                    short_desc="Time in '{}'".format(display_name),
+                    target=tz,
+                    args_hint=kp.ItemArgsHint.REQUIRED,
+                    hit_hint=kp.ItemHitHint.IGNORE,
+                    loop_on_suggest=True,
+                )
+            )
+            count += 1
+        return suggestions
 
     def _tryparse(self, in_str):
         """Tries to parse a string into a datetime object"""
