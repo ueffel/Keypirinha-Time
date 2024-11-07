@@ -3,3 +3,4 @@
 __pycache__
 *.bak
 *.keypirinha-package
+.nvim.lua
